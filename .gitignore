@@ -1,0 +1,33 @@
+# Build
+build/
+Debug/
+Release/
+
+# Compiled files
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+
+# CMake generated
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+
+# STM32CubeIDE generated settings
+.settings/
+.metadata/
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+*~
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,84 @@
+/*
+ * wav.c
+ *
+ *  Created on: Aug 23, 2026
+ *      Author: octav
+ */
+
+
+#include "wav.h"
+static uint8_t buffer[512] = {};
+static inline bool CompareTag(uint16_t entryOffset, const char *tag, uint8_t* bufferWav){
+	for (int i = 0; i < 4; i++) {
+		if(bufferWav[entryOffset + i] != tag[i])
+			return false;
+	}
+	return true;
+}
+
+static inline uint32_t ReadLE32(uint8_t off){
+	uint32_t tmp = 0;
+	tmp |= (uint32_t)buffer[off] 			|
+			(uint32_t)buffer[off+1] << 8 	|
+			(uint32_t)buffer[off+2] << 16 	|
+			(uint32_t)buffer[off+3] << 24;
+	return tmp;
+}
+static inline uint16_t ReadLE16(uint8_t off){
+	uint16_t tmp = 0;
+	tmp |= (uint16_t)buffer[off] |
+			(uint16_t)buffer[off+1] << 8;
+	return tmp;
+}
+
+WAV_Status_e WAV_Open(File_t *file, WAV_t *wav){
+	if(file == NULL || wav == NULL){
+		return wav_error;
+	}
+	uint16_t validBytes;
+	if( ReadNextBlock(file, buffer, &validBytes) != fs_ok){
+		return wav_error;
+	}
+
+	if(!CompareTag(0, "RIFF", buffer)){
+		return wav_invalid;
+	}
+
+	if(!CompareTag(8, "WAVE", buffer)){
+		return wav_invalid;
+	}
+	uint32_t initialOff = 0x0C;
+	bool dataFlag = false;
+	uint8_t tryout = 0;
+	while(!dataFlag && tryout < 4){
+		uint32_t off = initialOff;
+
+		uint32_t ChunkID = ReadLE32(off + 0);
+		uint32_t SizeFormatChunk = ReadLE32(off + 4);
+		if(ChunkID == WAV_CHUNK_FMT){
+			wav->AudioFormat = ReadLE16(off + 8);
+			wav->NumChannels = ReadLE16(off + 10);
+			wav->SampleRate = ReadLE32(off + 12);
+			wav->ByteRate = ReadLE32(off + 16);
+			wav->BlockAlign = ReadLE16(off + 20);
+			wav->BitsPerSample = ReadLE16(off + 22);
+			initialOff += 8 + SizeFormatChunk;
+		}
+		else if(ChunkID == WAV_CHUNK_DATA)
+		{
+			wav->DataSize = SizeFormatChunk;
+			wav->startData = initialOff + 8;
+			dataFlag = true;
+		}
+		else{
+			initialOff += 8 + SizeFormatChunk;
+		}
+		tryout++;
+	}
+
+	if(tryout >= 4){
+		return wav_error;
+	}
+
+	return wav_ok;
+}
