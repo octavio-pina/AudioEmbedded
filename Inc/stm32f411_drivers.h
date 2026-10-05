@@ -14,6 +14,7 @@
 #include "timer_driver.h"
 #include "spi_driver.h"
 #include "ring_buffer.h"
+#include "i2s_driver.h"
 
 
 #include "sd_card.h"

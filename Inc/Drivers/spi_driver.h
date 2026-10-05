@@ -140,6 +140,7 @@ typedef struct
 #define SPI_SR_FRE    8
 
 
+
 #define SPI_MAX_WAIT 10000U
 /******************************************************************************************
  *								APIs supported

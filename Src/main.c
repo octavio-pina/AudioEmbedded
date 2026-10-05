@@ -16,12 +16,21 @@
  ******************************************************************************
  */
 
+#include "spi_driver.h"
 #include "stm32f411_drivers.h"
+#include <stdint.h>
 
+uint8_t audio_buffer[512];
+
+PCM_Frame_t frame;
 WAV_t wav;
 File_t file;
 FileSystem_t fs;
 SD_Handle_t sdHandler;
+
+I2S_Handle_t I2S5Handler;
+PLLI2S_Handle_t PLLI2S5Handler;
+GPIO_Handle_t I2S5GPIO;
 
 SPI_Handle_t SPI2Handler;
 GPIO_Handle_t SPI22GPIO;
@@ -46,6 +55,64 @@ volatile uint8_t cnt = 0;
 volatile uint8_t debounce_cnt = 0;
 volatile uint8_t debounce_active = 0;
 volatile uint8_t debounce_ready = 0;
+void buffer_init(){
+	int i = 0;
+	int cnt = 0;
+	while(i < 512){
+		cnt = 0;
+		while(cnt < 24 && i < 512){
+			audio_buffer[i+0] = 0x40;
+			audio_buffer[i+1] = 0x1F;
+			audio_buffer[i+2] = 0x40;
+			audio_buffer[i+3] = 0x1F;
+			cnt++;
+			i+=4;
+		}
+		cnt = 0;
+		while(cnt < 24 && i < 512){
+			audio_buffer[i+0] = 0xC0;
+			audio_buffer[i+1] = 0xE0;
+			audio_buffer[i+2] = 0xC0;
+			audio_buffer[i+3] = 0xE0;
+			cnt++;
+			i+=4;
+		}
+	}
+
+}
+void i2s5_init(void){
+	I2S5GPIO.pGPIOx = GPIOB;
+	I2S5GPIO.GPIO_PinConfig.GPIO_PinPuPdCtlr  	= GPIO_NO_PUPD;
+	I2S5GPIO.GPIO_PinConfig.GPIO_PinOPType    	= GPIO_OPT_PP;
+	I2S5GPIO.GPIO_PinConfig.GPIO_PinSpeed     	= GPIO_SPEED_FST;
+	I2S5GPIO.GPIO_PinConfig.GPIO_PinNum       = GPIO_PIN0;
+	I2S5GPIO.GPIO_PinConfig.GPIO_PinMode      = GPIO_MODE_ALTFUN;
+	I2S5GPIO.GPIO_PinConfig.GPIO_PinAltFunMode= GPIO_AF6;
+	
+	GPIO_Init(&I2S5GPIO); //CK
+
+	I2S5GPIO.GPIO_PinConfig.GPIO_PinNum       = GPIO_PIN1;
+	GPIO_Init(&I2S5GPIO); //WS
+	
+	I2S5GPIO.GPIO_PinConfig.GPIO_PinNum       = GPIO_PIN8;
+	GPIO_Init(&I2S5GPIO); //SD
+
+	PLLI2S5Handler.PLLI2SR = 5;
+	PLLI2S5Handler.PLLI2SM = 8;
+	PLLI2S5Handler.PLLI2SN = 238;
+	I2S_PLLConfig(&PLLI2S5Handler);
+
+	I2S5Handler.pI2Sx = SPI5;
+	I2S5Handler.I2SConfig.I2S_ConfigMode = I2S_CFG_MASTER_TX;
+	I2S5Handler.I2SConfig.I2S_Standard = I2S_STD_PHILIPS;
+	I2S5Handler.I2SConfig.I2S_ClockPolarity = I2S_CKPOL_LOW;
+	I2S5Handler.I2SConfig.I2S_DataLen = I2S_DATALEN_16BITS;
+	I2S5Handler.I2SConfig.I2S_ChannelLen = I2S_CHLEN_16BITS;
+	I2S5Handler.I2SConfig.I2S_SampleRate = I2S_SAMPLE_RATE_48K;
+	I2S5Handler.I2SConfig.I2S_MCLK_Enable = I2S_MCKOE_DISABLE;
+
+	I2S_Init(&I2S5Handler);
+}
 
 void gpio_init(void){
 	// Configurar PA5 como Salida Push-Pull
@@ -191,6 +258,7 @@ void PrintHex(USART_Handle_t *pUSARTx, uint8_t value){
 int main(void)
 {
 	uint8_t space[2] = "\r\n";
+	uint8_t error[6] = "ERROR\n";
 	// uint16_t validBytes = 0;
 //	uint32_t FirstCluster = 0;
 	gpio_init();
@@ -198,51 +266,74 @@ int main(void)
 	tim9_init();
 	spi2_init();
 	sdCard_init();
+	i2s5_init();
+	buffer_init();
 	if(SD_Init(&sdHandler) == cmd_ok){
-		sdHandler.pSPIHandle->pSPIx->CR1 &= ~(1U << SPI_CR1_SPE);
+		sdHandler.pSPIHandle->pSPIx->CR1 &= ~(1U << SPI_CR1_SPE);          
 		sdHandler.pSPIHandle->SPIConfig.SPI_SclkSpeed = SPI_SCLK_SPEED_DIV8;
 		sdHandler.pSPIHandle->pSPIx->CR1 &= ~(0x7U << SPI_CR1_BR);
 		sdHandler.pSPIHandle->pSPIx->CR1 |= (sdHandler.pSPIHandle->SPIConfig.SPI_SclkSpeed << SPI_CR1_BR);
 		sdHandler.pSPIHandle->pSPIx->CR1 |= (1U << SPI_CR1_SPE);
 	}
-	Init_Filesystem(&sdHandler, &fs);
-	OpenFile(&fs, &file,"DARDOS  WAV");
+	// Init_Filesystem(&sdHandler, &fs);
+	// OpenFile(&fs, &file,"DARDOS  WAV");
 
-	if(WAV_Open(&file, &wav) == wav_ok){
-		GPIO_WriteToOutputPin(GPIOA, GPIO_PIN7, 1);
-	}
-	else
-	{
-		GPIO_WriteToOutputPin(GPIOA, GPIO_PIN7, 0);
-	}
+	// if(WAV_Open(&file, &wav) == wav_ok){
+	// 	GPIO_WriteToOutputPin(GPIOA, GPIO_PIN7, 1);
+	// }
+	// else
+	// {
+	// 	GPIO_WriteToOutputPin(GPIOA, GPIO_PIN7, 0);
+	// }
 
 	PrintHex(&USART2Handler, (wav.startData >> 24) & 0xFF);
 	PrintHex(&USART2Handler, (wav.startData >> 16) & 0xFF);
 	PrintHex(&USART2Handler, (wav.startData >> 8) & 0xFF);
 	PrintHex(&USART2Handler, (wav.startData >> 0) & 0xFF);
 	USART_SendData(&USART2Handler, space, 2);
-	PrintHex(&USART2Handler, (wav.DataSize >> 24) & 0xFF);
-	PrintHex(&USART2Handler, (wav.DataSize >> 16) & 0xFF);
-	PrintHex(&USART2Handler, (wav.DataSize >> 8) & 0xFF);
-	PrintHex(&USART2Handler, (wav.DataSize >> 0) & 0xFF);
-	USART_SendData(&USART2Handler, space, 2);
 
-//	PrintHex(&USART2Handler, (wav.startData >> 24) & 0xFF);
-//	PrintHex(&USART2Handler, (wav.startData >> 16) & 0xFF);
-//	PrintHex(&USART2Handler, (wav.startData >> 8) & 0xFF);
-//	PrintHex(&USART2Handler, (wav.startData >> 0) & 0xFF);
-//	USART_SendData(&USART2Handler, space, 2);
+	int cnt = 0;
+	while(cnt < 0xC000){
+		if(WAV_ReadFrame(&wav, &frame) != frame_ok){
+			USART_SendData(&USART2Handler, error, 6);
+			break;
+		}
+		if(frame.left_frame != 0 || frame.rigth_frame != 0){
+			PrintHex(&USART2Handler, (frame.left_frame >> 8) & 0xFF);
+			PrintHex(&USART2Handler, frame.left_frame & 0xFF);
 
-//	PrintHex(&USART2Handler, buffer[3]);
-//
-//	USART_SendData(&USART2Handler, space, 2);
+			USART_SendData(&USART2Handler, space, 2);
 
+			PrintHex(&USART2Handler, (frame.rigth_frame >> 8) & 0xFF);
+			PrintHex(&USART2Handler, frame.rigth_frame & 0xFF);
 
+			USART_SendData(&USART2Handler, space, 2);
 
+			PrintHex(&USART2Handler, (cnt >> 24) & 0xFF);
+			PrintHex(&USART2Handler, (cnt >> 16) & 0xFF);
+			PrintHex(&USART2Handler, (cnt >> 8) & 0xFF);
+			PrintHex(&USART2Handler, cnt & 0xFF);
+			USART_SendData(&USART2Handler, space, 2);
+			break;
+		}
+		cnt++;
+	}
+	int i = 0;
     while(1){
-//    	if(ringBuffer_pop(&rb, &data) != rb_empty){
-//    		//USART_SendData(&USART2Handler, &data, 1);
-//    	}
+		if(i < 512){
+			int16_t leftFrame = (int16_t)((uint16_t)audio_buffer[i + 1] << 8 | (uint16_t)audio_buffer[i]);
+			int16_t rightFrame = (int16_t)((uint16_t)audio_buffer[i + 3] << 8 | (uint16_t)audio_buffer[i + 2]);
+			
+			while (!(I2S5Handler.pI2Sx->SR & I2S_FLAG_TXE));
+			I2S5Handler.pI2Sx->DR = leftFrame;
+			while (!(I2S5Handler.pI2Sx->SR & I2S_FLAG_TXE));
+			I2S5Handler.pI2Sx->DR = rightFrame ;
+			i += 4;
+		}
+		else{
+			i = 0;
+		}
+
 
 
     	if(cnt >= 50){
@@ -255,6 +346,7 @@ int main(void)
 
     		if(!GPIO_ReadFromInputPin(GpioBtn.pGPIOx, GPIO_PIN13)){
     			GPIO_ToggleOutputPin(GpioLed2.pGPIOx, GPIO_PIN6);
+				USART_SendData(&USART2Handler, msg_eof, 1);
     		}
     		EXTI->IMR |= (1U << GPIO_PIN13);
     	}

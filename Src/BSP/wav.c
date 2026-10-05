@@ -7,7 +7,11 @@
 
 
 #include "wav.h"
+#include <stdint.h>
 static uint8_t buffer[512] = {};
+static uint8_t frameBuffer[4] = {};
+static uint8_t frameIndex = 0;
+
 static inline bool CompareTag(uint16_t entryOffset, const char *tag, uint8_t* bufferWav){
 	for (int i = 0; i < 4; i++) {
 		if(bufferWav[entryOffset + i] != tag[i])
@@ -35,8 +39,10 @@ WAV_Status_e WAV_Open(File_t *file, WAV_t *wav){
 	if(file == NULL || wav == NULL){
 		return wav_error;
 	}
-	uint16_t validBytes;
-	if( ReadNextBlock(file, buffer, &validBytes) != fs_ok){
+
+	wav->file = file;
+
+	if( ReadNextBlock(file, buffer, &wav->validBytes) != fs_ok){
 		return wav_error;
 	}
 
@@ -62,17 +68,16 @@ WAV_Status_e WAV_Open(File_t *file, WAV_t *wav){
 			wav->ByteRate = ReadLE32(off + 16);
 			wav->BlockAlign = ReadLE16(off + 20);
 			wav->BitsPerSample = ReadLE16(off + 22);
-			initialOff += 8 + SizeFormatChunk;
 		}
 		else if(ChunkID == WAV_CHUNK_DATA)
 		{
 			wav->DataSize = SizeFormatChunk;
 			wav->startData = initialOff + 8;
+			wav->bufferOffset = wav->startData;
+			wav->remainingData = wav->DataSize;
 			dataFlag = true;
 		}
-		else{
-			initialOff += 8 + SizeFormatChunk;
-		}
+		initialOff += 8 + SizeFormatChunk;
 		tryout++;
 	}
 
@@ -81,4 +86,41 @@ WAV_Status_e WAV_Open(File_t *file, WAV_t *wav){
 	}
 
 	return wav_ok;
+}
+
+Frame_Status_e WAV_ReadFrame(WAV_t *wav, PCM_Frame_t* frame){
+	if(frame == NULL || wav == NULL){
+		return frame_error;
+	}
+	
+	while(frameIndex < 4){
+
+		if(wav->remainingData == 0){
+			if(frameIndex == 0){
+				return frame_eof;
+			}
+			return frame_error;
+		}
+
+		if(wav->bufferOffset >= wav->validBytes){
+			if( ReadNextBlock(wav->file, buffer, &wav->validBytes) != fs_ok){
+				return frame_error;
+			}
+
+			if(wav->validBytes == 0){
+				return frame_error;
+			}
+			wav->bufferOffset = 0;
+		}
+
+		frameBuffer[frameIndex++] = buffer[wav->bufferOffset++];
+		wav->remainingData--;
+
+	}
+
+	frameIndex = 0;
+
+	frame->left_frame = frameBuffer[1] << 8 | frameBuffer[0];
+	frame->rigth_frame = frameBuffer[3] << 8 | frameBuffer[2];
+	return frame_ok;
 }

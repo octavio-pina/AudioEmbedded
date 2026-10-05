@@ -9,6 +9,7 @@ target_sources(${PROJECT_NAME} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/Src/Drivers/spi_driver.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/Src/Drivers/timer_driver.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/Src/Drivers/uart_driver.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Src/Drivers/i2s_driver.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/Src/main.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/Src/syscalls.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/Src/sysmem.c"
