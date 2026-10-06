@@ -30,11 +30,13 @@ FS_Status_e Init_Filesystem(SD_Handle_t *sd, FileSystem_t *fs){
 
 	fs->NumFATs = fatCache[BPB_NUMFATS_OFF];
 
-	fs->RootClus = 	(uint32_t)fatCache[BPB_ROOTCLUS_OFF + 3] << 24 | 					(uint32_t)fatCache[BPB_ROOTCLUS_OFF + 2] << 16 |
+	fs->RootClus = 	(uint32_t)fatCache[BPB_ROOTCLUS_OFF + 3] << 24 | 
+					(uint32_t)fatCache[BPB_ROOTCLUS_OFF + 2] << 16 |
 					(uint32_t)fatCache[BPB_ROOTCLUS_OFF + 1] << 8  |
 					(uint32_t)fatCache[BPB_ROOTCLUS_OFF + 0] << 0  ;
 
-	fs->FATSize = 	(uint32_t)fatCache[BPB_FATSZ32_OFF + 3] << 24 | 					(uint32_t)fatCache[BPB_FATSZ32_OFF + 2] << 16 |
+	fs->FATSize = 	(uint32_t)fatCache[BPB_FATSZ32_OFF + 3] << 24 | 
+					(uint32_t)fatCache[BPB_FATSZ32_OFF + 2] << 16 |
 					(uint32_t)fatCache[BPB_FATSZ32_OFF + 1] << 8  |
 					(uint32_t)fatCache[BPB_FATSZ32_OFF + 0] << 0  ;
 
